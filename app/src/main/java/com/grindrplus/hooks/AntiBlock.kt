@@ -10,8 +10,14 @@ import com.grindrplus.core.logd
 import com.grindrplus.core.loge
 import com.grindrplus.utils.Hook
 import com.grindrplus.utils.HookStage
+import com.grindrplus.utils.RetrofitUtils
+import com.grindrplus.utils.RetrofitUtils.isGET
+import com.grindrplus.utils.RetrofitUtils.isPOST
+import com.grindrplus.utils.RetrofitUtils.isPUT
+import com.grindrplus.utils.RetrofitUtils.isResult
 import com.grindrplus.utils.hook
 import com.grindrplus.utils.hookConstructor
+import com.grindrplus.utils.withSuspendResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -24,11 +30,44 @@ class AntiBlock : Hook(
 ) {
     private val scope = CoroutineScope(Dispatchers.IO)
     private var myProfileId: Long = 0
+    private var chatService = "com.grindrapp.android.chat.data.datasource.api.service.ChatRestService" // search for '"v3/inbox"' and use the outer interface
     private val chatDeleteConversationPlugin = "R9.c" // search for '"com.grindrapp.android.chat.ChatDeleteConversationPlugin",' and use the outer class
     private val inboxFragmentV2DeleteConversations = "re.d" // search for '("chat_read_receipt", conversationId, null);'
     private val individualUnblockActivityViewModel = "bl.k" // search for 'SnackbarEvent.i.ERROR, R.string.unblock_individual_sync_blocks_failure, null, new SnackbarEvent'
 
     override fun init() {
+        logd("Initializing Anti Block with special stuff")
+        val chatServiceClass = findClass(chatService)
+
+        RetrofitUtils.hookService(chatServiceClass) { originalHandler, proxy, method, args ->
+            val result = try {
+                originalHandler.invoke(proxy, method, args)
+            } catch (e: Exception) {
+                loge("Original invocation failed for ${method.name}: ${e.message}")
+                throw e
+            }
+
+            try {
+                val isInboxV3 =
+                    method.name == "C"
+                logd("Method ${method.name}: isInboxV3=$isInboxV3")
+
+                if (isInboxV3) {
+                    logd("Interception triggered for v3/inbox via method: ${method.name}")
+                    // Debug arguments to catch potential ClassCast issues
+                    args.forEachIndexed { index, arg ->
+                        logd("Arg[$index]: type=${arg?.javaClass?.name}, value=$arg")
+                    }
+                    return@hookService handleGetChats(args, result)
+                }
+            } catch (e: Exception) {
+                loge("Error in AntiBlock interception logic: ${e.message}")
+                Logger.writeRaw("Interception Error:\n${e.stackTraceToString()}")
+            }
+
+            result
+        }
+
         // do not invoke antiblock notification when the user is unblocking someone else
         // search for '.setValue(new DialogMessage(116, null, 2, null));'
         findClass(individualUnblockActivityViewModel)
@@ -149,6 +188,66 @@ class AntiBlock : Hook(
             }
         }
     }
+
+
+    private fun handleGetChats(args: Array<Any?>, result: Any) =
+        withSuspendResult(args, result) { suspendArgs, originalResult ->
+            try {
+                // originalResult is the Result wrapper (e.g., AbstractC5533a.Success)
+                // We need to use reflection to find the 'data' field containing ConversationsResponseV3
+                val resultClass = originalResult.javaClass
+
+                // Search for a field that matches our ConversationsResponse type
+                val dataField = resultClass.declaredFields.firstOrNull { field ->
+                    // This checks if the field type is a subclass of ConversationsResponse
+                    findClass("com.grindrapp.android.chat.api.model.ConversationsResponse")
+                        .isAssignableFrom(field.type)
+                }
+
+                dataField?.let { field ->
+                    field.isAccessible = true
+                    val response = field.get(originalResult)
+
+                    // Use reflection to call 'getConversations' on the response object
+                    val getConversationsMethod = response.javaClass.getMethod("getConversations")
+                    val conversations = getConversationsMethod.invoke(response) as List<*>
+
+                    // 1. Extract IDs from the incoming network response
+                    val incomingIds = conversations.mapNotNull { conv ->
+                        // Each item is an 'InboxConversation'. We need its conversationId.
+                        // You might need to check JADX for the exact method name (e.g., "getConversationId")
+                        val getConvIdMethod = conv?.javaClass?.getMethod("getConversationId")
+                        getConvIdMethod?.invoke(conv) as? String
+                    }
+
+                    // 2. Fetch known IDs from your local database
+                    val localIds = DatabaseHelper.query(
+                        "SELECT conversation_id FROM chat_conversations",
+                        null
+                    ).mapNotNull { it["conversation_id"] as? String }
+
+                    // 3. Find the differences
+                    val missingFromInbox = localIds.filter { it !in incomingIds }
+
+                    if (missingFromInbox.isNotEmpty()) {
+                        logd("Potential Blocks Detected! Missing IDs: ${missingFromInbox.joinToString()}")
+                        // Trigger your notification logic for each missing ID here
+                    }
+
+                    // 4. Find new chats
+                    val newInInbox = incomingIds.filter { it !in localIds }
+
+                    if(newInInbox.isNotEmpty()) {
+                        logd("New Chats Detected! New IDs: ${newInInbox.joinToString()}")
+                    }
+                }
+            } catch (e: Exception) {
+                loge("AntiBlock: Failed to process inbox diff: ${e.message}")
+            }
+
+            // Return the originalResult untouched to keep the app happy
+            return@withSuspendResult originalResult
+        }
 
     private fun fetchProfileData(profileId: String): String {
         val response = GrindrPlus.httpClient.sendRequest(
