@@ -8,13 +8,10 @@ import com.grindrplus.core.DatabaseHelper
 import com.grindrplus.core.Logger
 import com.grindrplus.core.logd
 import com.grindrplus.core.loge
+import com.grindrplus.persistence.mappers.asInboxToConversationEntities
 import com.grindrplus.utils.Hook
 import com.grindrplus.utils.HookStage
 import com.grindrplus.utils.RetrofitUtils
-import com.grindrplus.utils.RetrofitUtils.isGET
-import com.grindrplus.utils.RetrofitUtils.isPOST
-import com.grindrplus.utils.RetrofitUtils.isPUT
-import com.grindrplus.utils.RetrofitUtils.isResult
 import com.grindrplus.utils.hook
 import com.grindrplus.utils.hookConstructor
 import com.grindrplus.utils.withSuspendResult
@@ -49,7 +46,7 @@ class AntiBlock : Hook(
 
             try {
                 val isInboxV3 =
-                    method.name == "C"
+                    method.name == "C" || method.name == "D"
                 logd("Method ${method.name}: isInboxV3=$isInboxV3")
 
                 if (isInboxV3) {
@@ -192,60 +189,85 @@ class AntiBlock : Hook(
 
     private fun handleGetChats(args: Array<Any?>, result: Any) =
         withSuspendResult(args, result) { suspendArgs, originalResult ->
-            try {
-                // originalResult is the Result wrapper (e.g., AbstractC5533a.Success)
-                // We need to use reflection to find the 'data' field containing ConversationsResponseV3
-                val resultClass = originalResult.javaClass
+            return@withSuspendResult originalResult
+            // 1. Map server response
+            val serverConversations = originalResult.asInboxToConversationEntities()
 
-                // Search for a field that matches our ConversationsResponse type
-                val dataField = resultClass.declaredFields.firstOrNull { field ->
-                    // This checks if the field type is a subclass of ConversationsResponse
-                    findClass("com.grindrapp.android.chat.api.model.ConversationsResponse")
-                        .isAssignableFrom(field.type)
-                }
-
-                dataField?.let { field ->
-                    field.isAccessible = true
-                    val response = field.get(originalResult)
-
-                    // Use reflection to call 'getConversations' on the response object
-                    val getConversationsMethod = response.javaClass.getMethod("getConversations")
-                    val conversations = getConversationsMethod.invoke(response) as List<*>
-
-                    // 1. Extract IDs from the incoming network response
-                    val incomingIds = conversations.mapNotNull { conv ->
-                        // Each item is an 'InboxConversation'. We need its conversationId.
-                        // You might need to check JADX for the exact method name (e.g., "getConversationId")
-                        val getConvIdMethod = conv?.javaClass?.getMethod("getConversationId")
-                        getConvIdMethod?.invoke(conv) as? String
-                    }
-
-                    // 2. Fetch known IDs from your local database
-                    val localIds = DatabaseHelper.query(
-                        "SELECT conversation_id FROM chat_conversations",
-                        null
-                    ).mapNotNull { it["conversation_id"] as? String }
-
-                    // 3. Find the differences
-                    val missingFromInbox = localIds.filter { it !in incomingIds }
-
-                    if (missingFromInbox.isNotEmpty()) {
-                        logd("Potential Blocks Detected! Missing IDs: ${missingFromInbox.joinToString()}")
-                        // Trigger your notification logic for each missing ID here
-                    }
-
-                    // 4. Find new chats
-                    val newInInbox = incomingIds.filter { it !in localIds }
-
-                    if(newInInbox.isNotEmpty()) {
-                        logd("New Chats Detected! New IDs: ${newInInbox.joinToString()}")
-                    }
-                }
-            } catch (e: Exception) {
-                loge("AntiBlock: Failed to process inbox diff: ${e.message}")
+            if (serverConversations.isEmpty()) {
+                logd("AntiBlock: Server returned an empty inbox page. Skipping delta check.")
+                return@withSuspendResult originalResult
             }
 
-            // Return the originalResult untouched to keep the app happy
+            // 2. Establish the Pagination Boundary
+            val oldestServerTimestamp = serverConversations.minOf { it.lastActivityTimestamp }
+            val serverParticipantIds = serverConversations.map { it.participantId }.toSet()
+            val myId = GrindrPlus.myProfileId.toLongOrNull() ?: return@withSuspendResult originalResult
+
+            logd("AntiBlock: --- Starting Delta Detection ---")
+            logd("AntiBlock: Server returned ${serverParticipantIds.size} chats.")
+            logd("AntiBlock: Oldest chat in this page timestamp: $oldestServerTimestamp")
+
+            if (GrindrPlus.shouldTriggerAntiblock) {
+                try {
+                    // 3. Query Local DB for chats that SHOULD be in this time window
+                    val localRows = DatabaseHelper.query(
+                        "SELECT conversation_id, last_activity_timestamp FROM chat_conversations WHERE last_activity_timestamp >= ?",
+                        arrayOf(oldestServerTimestamp.toString())
+                    )
+
+                    logd("AntiBlock: Local DB has ${localRows.size} chats within this time window.")
+
+                    val localParticipantIds = localRows.mapNotNull { row ->
+                        val convId = row["conversation_id"] as? String ?: return@mapNotNull null
+                        convId.split(":")
+                            .mapNotNull { it.toLongOrNull() }
+                            .firstOrNull { it != myId }
+                    }.toSet()
+
+                    // 4. Calculate the real disappearances
+                    val missingParticipantIds = localParticipantIds - serverParticipantIds
+
+                    if (missingParticipantIds.isNotEmpty()) {
+                        logd("AntiBlock: Found ${missingParticipantIds.size} users missing from server results: $missingParticipantIds")
+
+                        missingParticipantIds.forEach { otherId ->
+                            // 5. Verify if we blocked them
+                            val weBlockedThem = DatabaseHelper.query(
+                                "SELECT * FROM blocks WHERE profileId = ?",
+                                arrayOf(otherId.toString())
+                            ).isNotEmpty()
+
+                            if (weBlockedThem) {
+                                logd("AntiBlock: Skipping $otherId (Reason: Manually blocked by you).")
+                            } else {
+                                logd("AntiBlock: SUSPECT DETECTED: $otherId. Triggering profile fetch...")
+
+                                val reconstructedConvId = if (myId < otherId) "$myId:$otherId" else "$otherId:$myId"
+                                try {
+                                    val profileResponse = fetchProfileData(otherId.toString())
+                                    val jsonResponse = JSONObject(profileResponse)
+                                    val profilesArray = jsonResponse.optJSONArray("profiles")
+
+                                    if (profilesArray == null || profilesArray.length() == 0) {
+                                        logd("AntiBlock: Profile data received for $otherId. Handling response...")
+                                        handleProfileResponse(otherId, reconstructedConvId, profileResponse)
+                                    }
+                                } catch (e: Exception) {
+                                    loge("AntiBlock: Critical error fetching profile for $otherId: ${e.message}")
+                                }
+                            }
+                        }
+                    } else {
+                        logd("AntiBlock: Delta is zero. All local chats in this window match server response.")
+                    }
+                } catch (e: Exception) {
+                    loge("AntiBlock: Error during database delta check: ${e.message}")
+                }
+            } else {
+                logd("AntiBlock: Logic skipped (Switch is OFF).")
+            }
+
+            logd("AntiBlock: --- Delta Detection Finished ---")
             return@withSuspendResult originalResult
         }
 
