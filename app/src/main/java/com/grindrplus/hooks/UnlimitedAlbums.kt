@@ -25,7 +25,6 @@ import com.grindrplus.utils.RetrofitUtils.getSuccessValue
 import com.grindrplus.utils.RetrofitUtils.isFail
 import com.grindrplus.utils.RetrofitUtils.isGET
 import com.grindrplus.utils.RetrofitUtils.isPUT
-import com.grindrplus.utils.RetrofitUtils.isResult
 import com.grindrplus.utils.RetrofitUtils.isSuccess
 import com.grindrplus.utils.hook
 import com.grindrplus.utils.hookConstructor
@@ -59,8 +58,8 @@ class UnlimitedAlbums : Hook("Unlimited albums", "Allow to be able to view unlim
         ) { originalHandler, proxy, method, args ->
             val result = originalHandler.invoke(proxy, method, args)
 
-            if (!result.isResult())
-                return@hookService result
+            //if (!result.isResult())
+            //return@hookService result
 
             try {
                 when {
