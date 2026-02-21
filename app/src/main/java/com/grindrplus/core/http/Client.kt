@@ -63,6 +63,7 @@ class Client(interceptor: Interceptor) {
                 "POST"
             )
             if (response.isSuccessful) {
+                response.close()
                 if (!silent) showToast(Toast.LENGTH_LONG, "User blocked successfully")
                 if (reflectInDb) {
                     val order = DatabaseHelper.query(
@@ -98,6 +99,7 @@ class Client(interceptor: Interceptor) {
                 "DELETE"
             )
             if (response.isSuccessful) {
+                response.close()
                 if (!silent) showToast(Toast.LENGTH_LONG, "User unblocked successfully")
                 try {
                     if (reflectInDb) {
@@ -138,6 +140,7 @@ class Client(interceptor: Interceptor) {
                 "POST"
             )
             if (response.isSuccessful) {
+                response.close()
                 if (!silent) showToast(Toast.LENGTH_LONG, "User favorited successfully")
                 if (reflectInDb) {
                     DatabaseHelper.insert(
@@ -168,6 +171,7 @@ class Client(interceptor: Interceptor) {
                 "DELETE"
             )
             if (response.isSuccessful) {
+                response.close()
                 if (!silent) showToast(Toast.LENGTH_LONG, "User unfavorited successfully")
                 try {
                     if (reflectInDb) {
@@ -193,27 +197,55 @@ class Client(interceptor: Interceptor) {
         }
     }
 
-    fun updateLocation(geohash: String) {
+    fun updateLocation(geohash: String): Boolean {
         val body = """
             {
                 "geohash": "$geohash"
             }
         """.trimIndent()
 
-        GrindrPlus.executeAsync {
-            val response = sendRequest(
-                "https://grindr.mobi/v4/location",
-                "PUT",
-                body = body.toRequestBody(),
-                headers = mapOf("Content-Type" to "application/json; charset=UTF-8")
-            )
-            if (response.isSuccessful) {
-                showToast(Toast.LENGTH_LONG, "Location updated successfully")
-            } else {
-                response.useBody { errorBody ->
-                    showToast(Toast.LENGTH_LONG, "Failed to update location: $errorBody")
-                }
+        val response = sendRequest(
+            "https://grindr.mobi/v4/location",
+            "PUT",
+            body = body.toRequestBody(),
+            headers = mapOf("Content-Type" to "application/json; charset=UTF-8")
+        )
+        if (response.isSuccessful) {
+            response.close()
+            return true
+        } else {
+            response.useBody { errorBody ->
+                Logger.e("Failed to update location: $errorBody")
             }
+            return false
+        }
+    }
+
+    /**
+     * Work-around to force Grindr's internal session refresh
+     * by any PUT to prefs, such as setting incognito: true
+     */
+    fun refreshSessionViaIncognito(): Boolean {
+        try {
+            val settingsUrl = "https://grindr.mobi/v3/me/prefs/settings"
+            val jsonHeaders = mapOf("Content-Type" to "application/json; charset=UTF-8")
+
+            val onBody = """{"settings":{"incognito":true}}""".toRequestBody()
+            val onResponse = sendRequest(settingsUrl, "PUT", body = onBody, headers = jsonHeaders)
+
+            if (!onResponse.isSuccessful) {
+                onResponse.useBody { errorBody ->
+                    Logger.w("Incognito set to true failed (${onResponse.code}): $errorBody")
+                }
+                return false
+            } else {
+                onResponse.close()
+            }
+
+            return true
+        } catch (e: Exception) {
+            Logger.w("Session refresh via incognito failed: ${e.message}")
+            return false
         }
     }
 
@@ -241,6 +273,7 @@ class Client(interceptor: Interceptor) {
             )
 
             if (response.isSuccessful) {
+                response.close()
                 showToast(Toast.LENGTH_LONG, "User reported successfully")
             } else {
                 response.useBody { errorBody ->
@@ -408,6 +441,7 @@ class Client(interceptor: Interceptor) {
                 headers = mapOf("Content-Type" to "application/json; charset=utf-8")
             )
             if (response.isSuccessful) {
+                response.close()
                 try {
                     val existingNote = DatabaseHelper.query(
                         "SELECT * FROM profile_note WHERE profile_id = ?",
