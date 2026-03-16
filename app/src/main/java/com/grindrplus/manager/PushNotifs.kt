@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import com.google.gson.JsonParser
 import com.grindrplus.R
 import com.grindrplus.core.Config
+import com.grindrplus.core.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -60,32 +61,36 @@ suspend fun fetchNotifs(context: Context) {
                 )
                 .build()
 
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw IOException("Unexpected code $response")
+            try {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw IOException("Unexpected code $response")
 
-                tgMessages.value =
-                    JsonParser.parseString(response.body!!.string()).asJsonArray
-                        .map { it.asJsonObject }
-                        .map { obj ->
-                            GPlusMessage(
-                                obj.get("message_id").asString,
-                                obj.get("text").asString,
-                                obj.get("date").asLong
-                            )
-                        }
-                        .filterNot { it.content.isBlank() }
-                        .sortedBy { it.id }.toList()
+                    tgMessages.value =
+                        JsonParser.parseString(response.body!!.string()).asJsonArray
+                            .map { it.asJsonObject }
+                            .map { obj ->
+                                GPlusMessage(
+                                    obj.get("message_id").asString,
+                                    obj.get("text").asString,
+                                    obj.get("date").asLong
+                                )
+                            }
+                            .filterNot { it.content.isBlank() }
+                            .sortedBy { it.id }.toList()
 
-                // Save successful fetch timestamp so BridgeService can respect the interval.
-                Config.put("last_news_fetch_ms", System.currentTimeMillis())
+                    // Save successful fetch timestamp so BridgeService can respect the interval.
+                    Config.put("last_news_fetch_ms", System.currentTimeMillis())
 
-                val msg = tgMessages.value.lastOrNull() ?: return@use
-                if (Config.get("last_push_id", "") != msg.id) {
-                    Config.put("last_push_id", msg.id)
-                    if (msg.content.contains("#push"))
-                        sendNotification(context, msg.content.replace("#push", "").trim())
-                    else sendNotification(context)
+                    val msg = tgMessages.value.lastOrNull() ?: return@use
+                    if (Config.get("last_push_id", "") != msg.id) {
+                        Config.put("last_push_id", msg.id)
+                        if (msg.content.contains("#push"))
+                            sendNotification(context, msg.content.replace("#push", "").trim())
+                        else sendNotification(context)
+                    }
                 }
+            } catch (e: Exception) {
+                Logger.e("fetchNotifs: Failed to fetch notifications: ${e.message}")
             }
         }
     }
