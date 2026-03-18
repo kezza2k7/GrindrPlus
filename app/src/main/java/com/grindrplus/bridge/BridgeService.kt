@@ -14,6 +14,7 @@ import android.os.Process
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
+import com.grindrplus.core.Config
 import com.grindrplus.core.LogSource
 import com.grindrplus.core.Logger
 import com.grindrplus.manager.fetchNotifs
@@ -87,14 +88,24 @@ class BridgeService : Service() {
                 periodicTasksExecutor.scheduleWithFixedDelay(
                     {
                         try {
-                            runBlocking { fetchNotifs(this@BridgeService) }
+                            val intervalHours = (Config.get("news_fetch_interval_hours", 6) as Number).toLong()
+                            // 0 = user disabled automatic fetching entirely.
+                            if (intervalHours <= 0) return@scheduleWithFixedDelay
+
+                            val lastFetchMs = (Config.get("last_news_fetch_ms", 0L) as Number).toLong()
+                            val intervalMs = intervalHours * 60L * 60L * 1000L
+                            val elapsedMs = System.currentTimeMillis() - lastFetchMs
+
+                            if (elapsedMs >= intervalMs) {
+                                runBlocking { fetchNotifs(this@BridgeService) }
+                            }
                         } catch (e: Exception) {
-                            Timber.tag(TAG).e(e, "Failed to fetch notifications")
+                            Timber.tag(TAG).e(e, "Error in periodic news fetch check")
                         }
                     },
                     0,
                     15,
-                    java.util.concurrent.TimeUnit.SECONDS
+                    java.util.concurrent.TimeUnit.MINUTES
                 )
             } catch (e: Exception) {
                 Timber.tag(TAG).e(e, "Failed to schedule periodic tasks")
