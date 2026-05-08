@@ -23,8 +23,8 @@ class AlwaysOnline :
         private set
     var lastRunSuccess: Boolean = false
         private set
-    var lastError: String? = null
-        private set
+    override var lastError: String? = null
+        protected set
     var runCount: Int = 0
         private set
 
@@ -39,8 +39,8 @@ class AlwaysOnline :
             if (serverDrivenCascadeRepoInstance == null) {
                 lastRunTime = System.currentTimeMillis()
                 lastRunSuccess = false
-                lastError = "Unable to access the cascade instance." +
-                        " This could mean the app was killed by Android's process killer, " +
+                lastError = "Unable to access the cascade instance. " +
+                        "This could mean the Grindr process was killed or frozen by Android, " +
                         "or that you have not logged into your account yet."
                 logw("Run #$runNumber skipped: $lastError")
                 return false
@@ -97,31 +97,28 @@ class AlwaysOnline :
             val expectedParamCount = method.parameterCount - 1 // exclude continuation
             logd("Run #$runNumber: calling $methodName (expects $expectedParamCount params + continuation)")
 
-            val params = arrayOf<Any?>(
-                geoHash,
-                null,
-                false, false, false, false,
-                null, null, null,
-                null, null, null, null,
-                null, null, null, null,
-                null, null, null, null,
-                false,
-                1,
-                null, null,
-                false, false, false,
-                null,
-                false,
-                null
-            )
-
-            if (params.size != expectedParamCount) {
-                lastRunTime = System.currentTimeMillis()
-                lastRunSuccess = false
-                lastError = "Wrong number of arguments in Always Online module. Expected $expectedParamCount, got ${params.size}. " +
-                        "This likely means that this module is outdated and should be disabled for now."
-                loge("Run #\$runNumber failed: $lastError")
-                return false
+            val params = arrayOfNulls<Any?>(expectedParamCount)
+            
+            if (expectedParamCount >= 1) params[0] = geoHash
+            if (expectedParamCount >= 2) params[1] = null
+            if (expectedParamCount >= 6) {
+                params[2] = false
+                params[3] = false
+                params[4] = false
+                params[5] = false
             }
+            if (expectedParamCount >= 23) {
+                params[21] = false
+                params[22] = 1
+            }
+            if (expectedParamCount >= 28) {
+                params[25] = false
+                params[26] = false
+                params[27] = false
+            }
+            if (expectedParamCount >= 30) params[29] = false
+            
+            logd("Run #$runNumber: invoking $methodName with ${params.size} parameters")
 
             val result = callSuspendFunction { continuation ->
                 method.invoke(serverDrivenCascadeRepoInstance, *params, continuation)

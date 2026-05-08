@@ -72,8 +72,8 @@ import com.grindrplus.core.Config
 import com.grindrplus.core.Constants.GRINDR_PACKAGE_NAME
 import com.grindrplus.core.Logger
 import com.grindrplus.manager.MainNavItem.Home
-import com.grindrplus.manager.ui.BlockLogScreen
 import com.grindrplus.manager.ui.CalculatorScreen
+import com.grindrplus.manager.ui.LogsScreen
 import com.grindrplus.manager.ui.HomeScreen
 import com.grindrplus.manager.ui.InstallPage
 import com.grindrplus.manager.ui.NotificationScreen
@@ -96,7 +96,7 @@ import timber.log.Timber.DebugTree
 internal val activityScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 internal const val TAG = "GrindrPlus"
 internal const val DATA_URL =
-    "https://raw.githubusercontent.com/R0rt1z2/GrindrPlus/refs/heads/master/manifest.json"
+    "https://raw.githubusercontent.com/gustarmartins/GrindrPlus/refs/heads/master/manifest.json"
 
 sealed class MainNavItem(
     val icon: ImageVector? = null,
@@ -111,7 +111,7 @@ sealed class MainNavItem(
 
     data object Home : MainNavItem(Icons.Rounded.Home, "Home", { HomeScreen(this) })
 
-    data object BlockLog : MainNavItem(Icons.Filled.History, "Block Log", { BlockLogScreen(this) })
+    data object BlockLog : MainNavItem(Icons.Filled.History, "Logs", { LogsScreen(this) })
 
     data object Notifications :
         MainNavItem(Icons.Filled.Newspaper, "News", { NotificationScreen(this) })
@@ -270,10 +270,8 @@ class MainActivity : ComponentActivity() {
                             Config.getCurrentPackageConfig().optJSONObject("hooks")?.let {
                                 val keyToEnabled = mutableMapOf<String, Any>();
                                 for (key in it.keys()) {
-                                    keyToEnabled.put(
-                                        key,
+                                    keyToEnabled[key] =
                                         it.getJSONObject(key).optBoolean("enabled", false) as Any
-                                    )
                                 }
                                 keyToEnabled
                             } ?: emptyMap<String, Any>().toMutableMap()

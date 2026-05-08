@@ -36,6 +36,8 @@ class BridgeService : Service() {
     private val logFile by lazy { File(getExternalFilesDir(null), "grindrplus.log") }
     private val blockEventsFile by lazy { File(getExternalFilesDir(null), "block_events.json") }
     private val blockEventsLock = ReentrantLock()
+    private val taskRunsFile by lazy { File(getExternalFilesDir(null), "task_runs.json") }
+    private val taskRunsLock = ReentrantLock()
     private val ioExecutor = Executors.newSingleThreadExecutor()
     private val logLock = ReentrantLock()
     private val MAX_LOG_SIZE = 5 * 1024 * 1024
@@ -154,6 +156,11 @@ class BridgeService : Service() {
                 if (!blockEventsFile.exists()) {
                     blockEventsFile.createNewFile()
                     blockEventsFile.writeText("[]")
+                }
+
+                if (!taskRunsFile.exists()) {
+                    taskRunsFile.createNewFile()
+                    taskRunsFile.writeText("[]")
                 }
             } catch (e: Exception) {
                 Logger.e("Failed to initialize files: ${e.message}", LogSource.BRIDGE)
@@ -403,6 +410,66 @@ class BridgeService : Service() {
 
         override fun isLSPosed(): Boolean {
             return com.grindrplus.manager.utils.isLSPosed()
+        }
+
+        override fun logTaskRun(taskId: String, success: Boolean, error: String?, durationMs: Long) {
+            ioExecutor.execute {
+                try {
+                    taskRunsLock.withLock {
+                        if (!taskRunsFile.exists()) {
+                            taskRunsFile.createNewFile()
+                            taskRunsFile.writeText("[]")
+                        }
+
+                        val runsArray = JSONArray(taskRunsFile.readText().ifBlank { "[]" })
+                        val run = JSONObject().apply {
+                            put("taskId", taskId)
+                            put("success", success)
+                            put("error", error ?: JSONObject.NULL)
+                            put("timestamp", System.currentTimeMillis())
+                            put("durationMs", durationMs)
+                        }
+                        runsArray.put(run)
+                        taskRunsFile.writeText(runsArray.toString(4))
+                        Logger.d(
+                            "Logged task run for $taskId: ${if (success) "success" else "failure"}",
+                            LogSource.BRIDGE
+                        )
+                    }
+                } catch (e: Exception) {
+                    Timber.tag(TAG).e(e, "Error logging task run")
+                }
+            }
+        }
+
+        override fun getTaskRuns(): String {
+            return try {
+                if (!taskRunsFile.exists()) {
+                    taskRunsFile.createNewFile()
+                    "[]"
+                } else {
+                    taskRunsFile.readText().ifBlank { "[]" }
+                }
+            } catch (e: Exception) {
+                Logger.e("Error reading task runs file", LogSource.BRIDGE)
+                Logger.writeRaw(e.stackTraceToString())
+                "[]"
+            }
+        }
+
+        override fun clearTaskRuns() {
+            taskRunsLock.withLock {
+                try {
+                    if (taskRunsFile.exists()) {
+                        taskRunsFile.delete()
+                        taskRunsFile.createNewFile()
+                        taskRunsFile.writeText("[]")
+                    }
+                } catch (e: Exception) {
+                    Logger.e("Error clearing task runs file", LogSource.BRIDGE)
+                    Logger.writeRaw(e.stackTraceToString())
+                }
+            }
         }
     }
 

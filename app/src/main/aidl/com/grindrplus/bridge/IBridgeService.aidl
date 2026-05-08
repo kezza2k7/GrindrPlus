@@ -13,6 +13,9 @@ interface IBridgeService {
     String getBlockEvents();
     boolean isLSPosed();
     void clearBlockEvents();
+    void logTaskRun(String taskId, boolean success, String error, long durationMs);
+    String getTaskRuns();
+    void clearTaskRuns();
     void sendNotification(String title, String message, int notificationId, String channelId, String channelName, String channelDescription);
     void sendNotificationWithActions(String title, String message, int notificationId, String channelId,
                                     String channelName, String channelDescription,

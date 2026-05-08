@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.Application
 import android.app.Application.ActivityLifecycleCallbacks
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -12,6 +13,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import com.grindrplus.bridge.BridgeClient
 import com.grindrplus.core.Config
 import com.grindrplus.core.EventManager
@@ -28,7 +30,6 @@ import com.grindrplus.utils.HookManager
 import com.grindrplus.utils.PCHIP
 import com.grindrplus.utils.HookStage
 import com.grindrplus.utils.hookConstructor
-import de.robv.android.xposed.XposedHelpers.getObjectField
 import de.robv.android.xposed.XposedHelpers.callMethod
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -223,6 +224,7 @@ object GrindrPlus {
         try {
             val initTime = measureTimeMillis { initializeCore() }
             Logger.i("Initialization completed in $initTime ms", LogSource.MODULE)
+            setupTaskTriggerReceiver()
             isInitialized = true
         } catch (t: Throwable) {
             Logger.e("Failed to initialize: ${t.message}", LogSource.MODULE)
@@ -604,6 +606,32 @@ object GrindrPlus {
                 }
             }
         })
+    }
+
+    private fun setupTaskTriggerReceiver() {
+        try {
+            val filter = android.content.IntentFilter("com.grindrplus.TRIGGER_TASK")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(object : android.content.BroadcastReceiver() {
+                    override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                        val taskId = intent?.getStringExtra("taskId") ?: return
+                        com.grindrplus.core.Logger.d("Manual trigger received for task: $taskId", com.grindrplus.core.LogSource.MODULE)
+                        taskManager.triggerTask(taskId)
+                    }
+                }, filter, android.content.Context.RECEIVER_EXPORTED)
+            } else {
+                ContextCompat.registerReceiver(context, object : BroadcastReceiver() {
+                    override fun onReceive(context: Context?, intent: Intent?) {
+                        val taskId = intent?.getStringExtra("taskId") ?: return
+                        Logger.d("Manual trigger received for task: $taskId", LogSource.MODULE)
+                        taskManager.triggerTask(taskId)
+                    }
+                }, filter, ContextCompat.RECEIVER_EXPORTED)
+            }
+            Logger.i("Task trigger receiver registered", LogSource.MODULE)
+        } catch (e: Exception) {
+            Logger.e("Failed to register task trigger receiver: ${e.message}", LogSource.MODULE)
+        }
     }
 
     private fun fetchOwnUserId() {

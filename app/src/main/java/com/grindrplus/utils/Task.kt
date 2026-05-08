@@ -17,6 +17,9 @@ abstract class Task(
 ) {
     private var job: Job? = null
 
+    open var lastError: String? = null
+        protected set
+
     /**
      * Check if the task is enabled in config
      */
@@ -44,14 +47,27 @@ abstract class Task(
             initialDelayMillis = initialDelayMillis,
             intervalMillis = intervalMillis,
             action = {
+                val startTime = System.currentTimeMillis()
                 try {
                     val success = execute()
+                    val durationMs = System.currentTimeMillis() - startTime
+                    try {
+                        GrindrPlus.bridgeClient.logTaskRun(
+                            id, success,
+                            if (!success) (lastError ?: "Task returned false") else null,
+                            durationMs
+                        )
+                    } catch (_: Exception) {}
                     if (success) {
                         logd("Task $id executed successfully")
                     } else {
                         logw("Task $id run was unsuccessful")
                     }
                 } catch (e: Exception) {
+                    val durationMs = System.currentTimeMillis() - startTime
+                    try {
+                        GrindrPlus.bridgeClient.logTaskRun(id, false, e.message, durationMs)
+                    } catch (_: Exception) {}
                     loge("Task $id failed: ${e.message}")
                     Logger.writeRaw(e.stackTraceToString())
                 }
@@ -81,7 +97,7 @@ abstract class Task(
         Config.initTaskSettings(
             id,
             description,
-            false // disabled by default
+            true // enabled by default
         )
     }
 }
