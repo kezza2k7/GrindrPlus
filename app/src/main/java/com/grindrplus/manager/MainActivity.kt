@@ -82,6 +82,8 @@ import com.grindrplus.manager.ui.theme.GrindrPlusTheme
 import com.grindrplus.manager.utils.FileOperationHandler
 import com.grindrplus.utils.HookManager
 import com.grindrplus.utils.TaskManager
+import com.onebusaway.plausible.android.AndroidResourcePlausibleConfig
+import com.onebusaway.plausible.android.NetworkFirstPlausibleClient
 import com.onebusaway.plausible.android.Plausible
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -252,11 +254,43 @@ class MainActivity : ComponentActivity() {
                         checkUnknownSourcesPermission()
                     }
 
-                    plausible = null
+                    if (Config.get("analytics", true) as Boolean) {
+                        val config = AndroidResourcePlausibleConfig(this@MainActivity).also {
+                            it.domain = "grindrplus.lol"
+                            it.host = "https://plausible.gmmz.dev/api/"
+                            it.enable = true
+                        }
+
+                        plausible = Plausible(
+                            config = config,
+                            client = NetworkFirstPlausibleClient(config)
+                        )
+
+                        fun getHooks() =
+                            Config.getCurrentPackageConfig().optJSONObject("hooks")?.let {
+                                val keyToEnabled = mutableMapOf<String, Any>();
+                                for (key in it.keys()) {
+                                    keyToEnabled.put(
+                                        key,
+                                        it.getJSONObject(key).optBoolean("enabled", false) as Any
+                                    )
+                                }
+                                keyToEnabled
+                            } ?: emptyMap<String, Any>().toMutableMap()
+
+                        plausible?.enable(true)
+                        plausible?.pageView(
+                            "app://grindrplus/home",
+                            props = getHooks().apply {
+                                put("android_version", Build.VERSION.SDK_INT)
+                            }
+                        )
+                    }
 
                     if (Config.get("first_launch", true) as Boolean) {
                         firstLaunchDialog = true
                         patchInfoDialog = true
+                        plausible?.pageView("app://grindrplus/first_launch")
                         Config.put("first_launch", false)
                     }
                 }
