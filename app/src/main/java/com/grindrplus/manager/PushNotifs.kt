@@ -78,7 +78,7 @@ suspend fun fetchNotifs(context: Context) {
                     Config.put("last_news_fetch_ms", System.currentTimeMillis())
 
                     val msg = tgMessages.value.lastOrNull() ?: return@use
-                    if (Config.get("last_push_id", "") != msg.id) {
+                    if (Config.get("last_push_id", "").toString() != msg.id) {
                         Config.put("last_push_id", msg.id)
                         if (msg.content.contains("#push"))
                             sendNotification(context, msg.content.replace("#push", "").trim())
