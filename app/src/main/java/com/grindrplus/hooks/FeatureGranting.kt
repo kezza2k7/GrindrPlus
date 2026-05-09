@@ -2,6 +2,10 @@ package com.grindrplus.hooks
 
 import com.grindrplus.GrindrPlus
 import com.grindrplus.core.Config
+import com.grindrplus.core.Logger
+import com.grindrplus.core.logd
+import com.grindrplus.core.logi
+import com.grindrplus.core.loge
 import com.grindrplus.ui.Utils
 import com.grindrplus.utils.Feature
 import com.grindrplus.utils.FeatureManager
@@ -17,7 +21,7 @@ class FeatureGranting : Hook(
     "Feature granting",
     "Grant all Grindr features"
 ) {
-    private val isFeatureFlagEnabled = "q30.f" // search for 'implements IsFeatureFlagEnabled {'
+    private val isFeatureFlagEnabled = "ih.e" // search for 'implements IsFeatureFlagEnabled {'
     private val upsellsV8Model = "com.grindrapp.android.model.UpsellsV8"
     private val insertsModel = "com.grindrapp.android.model.Inserts"
     private val settingDistanceVisibilityViewModel =
@@ -29,26 +33,65 @@ class FeatureGranting : Hook(
     private val featureManager = FeatureManager()
 
     override fun init() {
-        initFeatures()
+        try {
+            initFeatures()
+        } catch (t: Throwable) {
+            loge("EnableUltimated: initFeatures failed: ${t.javaClass.simpleName}: ${t.message}")
+            Logger.writeRaw(t.stackTraceToString())
+            return
+        }
+        logi("EnableUltimated: Feature map initialized")
 
 		// search for 'Assignment.Flag'
-        findClass(isFeatureFlagEnabled).hook("a", HookStage.BEFORE) { param ->
-            val flagKey = callMethod(param.args()[0], "toString") as String
-            if (featureManager.isManaged(flagKey)) {
-                param.setResult(featureManager.isEnabled(flagKey))
+        try {
+            findClass(isFeatureFlagEnabled).hook("a", HookStage.BEFORE) { param ->
+                try {
+                    val flagKey = callMethod(param.args()[0], "toString") as String
+                    if (featureManager.isManaged(flagKey)) {
+                        val enabled = featureManager.isEnabled(flagKey)
+                        logd("EnableUltimated: Overriding feature flag '$flagKey' -> $enabled")
+                        param.setResult(enabled)
+                    }
+                } catch (t: Throwable) {
+                    loge("EnableUltimated: Feature flag interception failed: ${t.javaClass.simpleName}: ${t.message}")
+                    Logger.writeRaw(t.stackTraceToString())
+                }
             }
+        } catch (t: Throwable) {
+            loge("EnableUltimated: Failed to hook IsFeatureFlagEnabled: ${t.javaClass.simpleName}: ${t.message}")
+            Logger.writeRaw(t.stackTraceToString())
         }
 
-        findClass(featureModel).hook("isGranted", HookStage.BEFORE) { param ->
-            val disallowedFeatures = setOf("DisableScreenshot")
-            val feature = callMethod(param.thisObject(), "toString") as String
-            param.setResult(feature !in disallowedFeatures)
+        try {
+            findClass(featureModel).hook("isGranted", HookStage.BEFORE) { param ->
+                try {
+                    val disallowedFeatures = setOf("DisableScreenshot")
+                    val feature = callMethod(param.thisObject(), "toString") as String
+                    param.setResult(feature !in disallowedFeatures)
+                } catch (t: Throwable) {
+                    loge("EnableUltimated: isGranted override failed: ${t.javaClass.simpleName}: ${t.message}")
+                    Logger.writeRaw(t.stackTraceToString())
+                }
+            }
+        } catch (t: Throwable) {
+            loge("EnableUltimated: Failed to hook feature model: ${t.javaClass.simpleName}: ${t.message}")
+            Logger.writeRaw(t.stackTraceToString())
         }
 
-        findClass(settingDistanceVisibilityViewModel)
-            .hookConstructor(HookStage.BEFORE) { param ->
-                param.setArg(4, false) // hidePreciseDistance
-            }
+        try {
+            findClass(settingDistanceVisibilityViewModel)
+                .hookConstructor(HookStage.BEFORE) { param ->
+                    try {
+                        param.setArg(4, false) // hidePreciseDistance
+                    } catch (t: Throwable) {
+                        loge("EnableUltimated: Distance visibility override failed: ${t.javaClass.simpleName}: ${t.message}")
+                        Logger.writeRaw(t.stackTraceToString())
+                    }
+                }
+        } catch (t: Throwable) {
+            loge("EnableUltimated: Failed to hook distance visibility model: ${t.javaClass.simpleName}: ${t.message}")
+            Logger.writeRaw(t.stackTraceToString())
+        }
 
         listOf(upsellsV8Model, insertsModel).forEach { model ->
             findClass(model)
@@ -76,25 +119,35 @@ class FeatureGranting : Hook(
 
         val boostAlertString = GrindrPlus.context.resources.getString(boostAlertStringId)
 
-        findClass("androidx.appcompat.app.AlertDialog\$Builder")
-            .hook("show", HookStage.BEFORE) { param ->
-                val builder = param.thisObject()
-                val alertParams = getObjectField(builder, alertParams)
-                val messageString = getObjectField(alertParams, "mMessage")
+        try {
+            findClass("androidx.appcompat.app.AlertDialog\$Builder")
+                .hook("show", HookStage.BEFORE) { param ->
+                    try {
+                        val builder = param.thisObject()
+                        val alertParams = getObjectField(builder, alertParams)
+                        val messageString = getObjectField(alertParams, "mMessage")
 
-                if (messageString.equals(boostAlertString)) {
-                    val dialog = callMethod(builder, "create")
-                    val positiveButtonListener = getObjectField(alertParams, "mPositiveButtonListener")
+                        if (messageString.equals(boostAlertString)) {
+                            val dialog = callMethod(builder, "create")
+                            val positiveButtonListener = getObjectField(alertParams, "mPositiveButtonListener")
 
-                    val positiveButtonId = XposedHelpers.getStaticIntField(
-                        findClass("android.content.DialogInterface"),
-                        "BUTTON_POSITIVE"
-                    )
+                            val positiveButtonId = XposedHelpers.getStaticIntField(
+                                findClass("android.content.DialogInterface"),
+                                "BUTTON_POSITIVE"
+                            )
 
-                    callMethod(positiveButtonListener, "onClick", dialog, positiveButtonId)
+                            callMethod(positiveButtonListener, "onClick", dialog, positiveButtonId)
 
-                    param.setResult(dialog)
+                            param.setResult(dialog)
+                        }
+                    } catch (t: Throwable) {
+                        loge("EnableUltimated: AlertDialog boost bypass failed: ${t.javaClass.simpleName}: ${t.message}")
+                        Logger.writeRaw(t.stackTraceToString())
+                    }
                 }
+        } catch (t: Throwable) {
+            loge("EnableUltimated: Failed to hook AlertDialog.Builder.show: ${t.javaClass.simpleName}: ${t.message}")
+            Logger.writeRaw(t.stackTraceToString())
         }
     }
 
@@ -124,14 +177,27 @@ class FeatureGranting : Hook(
         featureManager.add(Feature("RunningOnEmulatorFeatureFlag", false))
         featureManager.add(Feature("BannerNewFlow", false))
         featureManager.add(Feature("CalendarUi", true))
-        featureManager.add(Feature("CookieTap", Config.get("enable_cookie_tap", false, true) as Boolean))
-        featureManager.add(Feature("VipFlag", Config.get("enable_vip_flag", false, true) as Boolean))
+        featureManager.add(Feature("CookieTap", getBooleanSetting("enable_cookie_tap", false)))
+        featureManager.add(Feature("VipFlag", getBooleanSetting("enable_vip_flag", false)))
         featureManager.add(Feature("PositionFilter", true))
         featureManager.add(Feature("AgeFilter", true))
         featureManager.add(Feature("BanterFeatureGate", false))
         featureManager.add(Feature("TakenOnGrindrWatermarkFlag", false))
         featureManager.add(Feature("gender-filter", true))
         featureManager.add(Feature("enable-chat-summaries", true))
-        featureManager.add(Feature("enable-mutual-taps-no-paywall", !(Config.get("enable_interest_section", true, true) as Boolean)))
+        featureManager.add(Feature("enable-mutual-taps-no-paywall", !getBooleanSetting("enable_interest_section", true)))
+        logi("EnableUltimated: Core feature grants loaded")
+    }
+
+    private fun getBooleanSetting(key: String, default: Boolean): Boolean {
+        val value = Config.get(key, default, true)
+        val parsed = when (value) {
+            is Boolean -> value
+            is String -> value.equals("true", ignoreCase = true)
+            is Number -> value.toInt() != 0
+            else -> default
+        }
+        logi("EnableUltimated: Setting '$key' raw='$value' parsed=$parsed default=$default")
+        return parsed
     }
 }

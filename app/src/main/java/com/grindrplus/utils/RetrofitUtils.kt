@@ -8,8 +8,8 @@ import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 
 object RetrofitUtils {
-    const val FAIL_CLASS_NAME = "g10.a\$a" // search for '"Fail(failValue="'
-    const val SUCCESS_CLASS_NAME = "g10.a\$b" // search for '"Success(successValue="'
+    const val FAIL_CLASS_NAME = "Yf.a\$a" // search for '"Fail(failValue="'
+    const val SUCCESS_CLASS_NAME = "Yf.a\$b" // search for '"Success(successValue="'
     const val SUCCESS_VALUE_NAME = "a" // probably the only field in the success class
     const val FAIL_VALUE_NAME = "a" // probably the only field in the fail class
     const val RETROFIT_NAME = "retrofit2.Retrofit"
@@ -166,14 +166,16 @@ object RetrofitUtils {
         resultMapper: (result: Any) -> Any
     ): Any? {
         // suspend fun has Continuation as last argument
-        val isSuspendFun = !args.isEmpty() || continuationInterface.isAssignableFrom(args.last()!!.javaClass)
+        val continuationArg = args.lastOrNull()
+        val isSuspendFun =
+            continuationArg != null && continuationInterface.isAssignableFrom(continuationArg.javaClass)
 
         if (!isSuspendFun) {
             val result = originalHandler.invoke(proxy, method, args)
             return resultMapper.invoke(result)
         }
 
-        val newContinuation = wrapContinuation(args.last()!!, resultMapper)
+        val newContinuation = wrapContinuation(continuationArg, resultMapper)
 
         val newArgs = args.clone()
         newArgs[newArgs.lastIndex] = newContinuation

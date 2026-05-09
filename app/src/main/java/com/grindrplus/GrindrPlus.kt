@@ -105,11 +105,12 @@ object GrindrPlus {
     val currentActivity: Activity?
         get() = currentActivityRef?.get()
 
-    internal val userAgent = "as.r" // search for 'grindr3/'
-    internal val userSession = "com.grindrapp.android.usersession.b" // search for 'com.grindrapp.android.storage.UserSessionImpl$1'
+
+    internal val userAgent = "Pb.e" // search for 'grindr3/'
+    internal val userSession = "com.grindrapp.android.usersession.UserSession" // interface; find implementation in same package
     private val deviceInfo =
         "ek.y" // search for 'AdvertisingIdClient.Info("00000000-0000-0000-0000-000000000000", true)'
-    internal val grindrLocationProvider = "nz.e" // search for 'system settings insufficient for location request, attempting to resolve'
+    internal val grindrLocationProvider = "ff.e" // search for 'system settings insufficient for location request, attempting to resolve'
     internal val serverDrivenCascadeRepo = "com.grindrapp.android.persistence.repository.ServerDrivenCascadeRepo"
     internal val ageVerificationActivity = "com.grindrapp.android.ageverification.presentation.ui.AgeVerificationActivity"
     internal val browseExploreActivity = "com.grindrapp.android.ui.browse.BrowseExploreMapActivity"
@@ -322,6 +323,7 @@ object GrindrPlus {
         instanceManager.setCallback(userSession) { uSession ->
             instanceManager.setCallback(userAgent) { uAgent ->
                 instanceManager.setCallback(deviceInfo) { dInfo ->
+                    Logger.d("Fucking hell$uSession$uAgent$dInfo")
                     httpClient = Client(Interceptor(uSession, uAgent, dInfo))
                     executeAsync {
                         kotlinx.coroutines.delay(1500)
@@ -667,7 +669,16 @@ object GrindrPlus {
                 Timber.tag("GrindrPlus").e("Failed to log crash: ${e.message}")
                 Timber.tag("GrindrPlus").e("Original crash: ${throwable.message}")
             } finally {
-                defaultHandler?.uncaughtException(thread, throwable)
+                // CoroutinesInternalError for an already-cancelled CancellableContinuation
+                // is a Grindr race condition (e.g. sendFcmToken) that only affects the
+                // background dispatcher thread — forwarding it to the default handler would
+                // unnecessarily kill the app.
+                val isCancelledContinuationError =
+                    throwable.javaClass.name == "kotlinx.coroutines.CoroutinesInternalError" &&
+                            throwable.message?.contains("Cancelled") == true
+                if (!isCancelledContinuationError) {
+                    defaultHandler?.uncaughtException(thread, throwable)
+                }
             }
         }
     }

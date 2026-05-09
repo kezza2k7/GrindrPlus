@@ -37,6 +37,7 @@ class Client(interceptor: Interceptor) {
         body: RequestBody? = null
     ): Response {
         val requestBuilder = Request.Builder().url(url)
+        Logger.i(url)
         headers?.forEach { (key, value) ->
             requestBuilder.addHeader(key, value)
         }

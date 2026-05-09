@@ -29,8 +29,8 @@ class ProfileDetails : Hook(
 	"Add extra fields and details to profiles"
 ) {
     private var boostedProfilesList = emptyList<String>()
-    private val blockedProfilesObserver = "ze0.n" // search for 'Intrinsics.checkNotNullParameter(dataList, "dataList");' - typically the last match
-    private val profileViewHolder = "vb0.m0\$c" // search for 'Intrinsics.checkNotNullParameter(individualUnblockActivityViewModel, "individualUnblockActivityViewModel");'
+    private val blockedProfilesObserver = "Hm.f" // search for 'Intrinsics.checkNotNullParameter(dataList, "dataList");' - typically the last match
+    private val profileViewHolder = "bl.u\$u" // search for 'Intrinsics.checkNotNullParameter(individualUnblockActivityViewModel, "individualUnblockActivityViewModel");'
 
     private val distanceUtils = "com.grindrapp.android.utils.DistanceUtils"
     private val profileBarView = "com.grindrapp.android.ui.profileV2.ProfileBarView"
@@ -186,7 +186,7 @@ class ProfileDetails : Hook(
         }
 
         findClass(profileViewState).hook("getWeight", HookStage.AFTER) { param ->
-            if (Config.get("show_bmi_in_profile", true) as Boolean) {
+            if (getBooleanSetting("show_bmi_in_profile", true)) {
                 val weight = param.getResult()
                 val height = callMethod(param.thisObject(), "getHeight")
 
@@ -197,7 +197,7 @@ class ProfileDetails : Hook(
                             w2n("kg" in weight.toString(), weight.toString()),
                             h2n("kg" in weight.toString(), height.toString())
                         )
-                    if (Config.get("do_gui_safety_checks", true) as Boolean) {
+                    if (getBooleanSetting("do_gui_safety_checks", true)) {
                         if (weight.toString().contains("(")) {
                             logw("BMI details are already present?")
                             return@hook
@@ -215,6 +215,16 @@ class ProfileDetails : Hook(
                     )
                 }
             }
+        }
+    }
+
+    private fun getBooleanSetting(key: String, default: Boolean): Boolean {
+        val value = Config.get(key, default)
+        return when (value) {
+            is Boolean -> value
+            is String -> value.equals("true", ignoreCase = true)
+            is Number -> value.toInt() != 0
+            else -> default
         }
     }
 }

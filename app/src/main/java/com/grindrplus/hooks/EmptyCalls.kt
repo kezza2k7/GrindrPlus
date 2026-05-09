@@ -8,7 +8,7 @@ class EmptyCalls : Hook(
     "Video calls",
     "Allow video calls on empty chats"
 ) {
-    private val individualChatNavViewModel = "to.p1" // search for 'com.grindrapp.android.chat.presentation.viewmodel.IndividualChatNavViewModel', then go to the class mentioned in the invokeSuspend method.
+    private val individualChatNavViewModel = "ma.b0" // search for 'com.grindrapp.android.chat.presentation.viewmodel.IndividualChatNavViewModel', then go to the class mentioned in the invokeSuspend method.
 
     override fun init() {
         findClass(individualChatNavViewModel) // isTalkBefore()

@@ -18,10 +18,10 @@ class DisableUpdates : Hook(
     "Disable forced updates"
 ) {
     private val versionInfoEndpoint =
-        "https://raw.githubusercontent.com/R0rt1z2/GrindrPlus/master/version.json"
+        "https://raw.githubusercontent.com/kezza2k7/GrindrPlus/master/version.json"
     private val appUpdateInfo = "com.google.android.play.core.appupdate.AppUpdateInfo"
     private val appUpdateZzm = "com.google.android.play.core.appupdate.zzm" // search for 'requestUpdateInfo(%s)'
-	private val appUpgradeManager = "rz.v" // search for 'Uri.parse("market://details?id=com.grindrapp.android");'
+	private val appUpgradeManager = "jf.n" // search for 'Uri.parse("market://details?id=com.grindrapp.android");'
     private val appConfiguration = "com.grindrapp.android.platform.config.AppConfiguration"
     private var versionCode: Int = 0
     private var versionName: String = ""
@@ -98,7 +98,9 @@ class DisableUpdates : Hook(
         ).versionName.toString()
 
         if (compareVersions(versionName, currentVersion) > 0) {
+            logd("They diffrent")
             findClass(appConfiguration).hookConstructor(HookStage.AFTER) { param ->
+                logd("They diffrent 2")
                 setObjectField(param.thisObject(), "d", "$versionName.$versionCode")
             }
 
@@ -107,6 +109,7 @@ class DisableUpdates : Hook(
                     field.isAccessible = true
                     val value = field.get(param.thisObject())
                     if (value is String && value.startsWith("grindr3/")) {
+                        logd("Updating user agent version to: $versionName ($versionCode) from $value")
                         field.set(param.thisObject(), "grindr3/$versionName.$versionCode;$versionCode;")
                         return@forEach
                     }
@@ -114,6 +117,13 @@ class DisableUpdates : Hook(
             }
         } else {
             logd("Current version is up-to-date: $versionName ($versionCode)")
+        }
+        // Hook Pb.e.e() and Pb.e.d() to always return the spoofed user agent string
+        findClass(GrindrPlus.userAgent).hook("e", HookStage.BEFORE) { param ->
+            param.setResult("grindr3/26.7.0.159416;159416;Premium;Android 13;2107113SG;Xiaomi")
+        }
+        findClass(GrindrPlus.userAgent).hook("d", HookStage.BEFORE) { param ->
+            param.setResult("grindr3/26.7.0.159416;159416;Premium;Android 13;2107113SG;Xiaomi")
         }
     }
 }

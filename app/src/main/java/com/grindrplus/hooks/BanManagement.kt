@@ -32,11 +32,11 @@ class BanManagement : Hook(
     "Ban management",
     "Provides comprehensive ban management tools (detailed ban info, etc.)"
 ) {
-    private val authServiceClass = "sk.g" // search for 'v3/users/password-validation'
+    private val authServiceClass = "J8.h" // search for 'v3/users/password-validation'
     private val materialButton = "com.google.android.material.button.MaterialButton"
     private val bannedFragment = "com.grindrapp.android.ui.account.banned.BannedFragment"
-    private val deviceUtility = "w80.m" // search for 'Settings.Secure.getString(context.getContentResolver(), "android_id")' and 'profile_tag_search_history'
-    private val bannedArgs = "xk.a" // search for 'new StringBuilder("BannedArgs(bannedType=")'
+    private val deviceUtility = "Ej.m" // search for 'Settings.Secure.getString(context.getContentResolver(), "android_id")' and 'profile_tag_search_history'
+    private val bannedArgs = "N8.a" // search for 'new StringBuilder("BannedArgs(bannedType=")'
     private var bannedInfo: JSONObject = JSONObject()
 
     @SuppressLint("DiscouragedApi")

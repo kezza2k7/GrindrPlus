@@ -18,7 +18,7 @@ class UnlimitedProfiles : Hook(
     "Allow unlimited profiles"
 ) {
     private val function2 = "kotlin.jvm.functions.Function2"
-    private val onProfileClicked = "com.grindrapp.android.ui.browse.e0" // search for 'com.grindrapp.android.ui.browse.ServerDrivenCascadeViewModel$onProfileClicked$1'
+    private val onProfileClicked = "com.grindrapp.android.ui.browse.E" // search for 'com.grindrapp.android.ui.browse.ServerDrivenCascadeViewModel$onProfileClicked$1'
     private val profileWithPhoto = "com.grindrapp.android.persistence.pojo.ProfileWithPhoto"
     private val serverDrivenCascadeCachedState =
         "com.grindrapp.android.persistence.model.serverdrivencascade.ServerDrivenCascadeCacheState"
@@ -107,7 +107,7 @@ class UnlimitedProfiles : Hook(
         }
 
         findClass(onProfileClicked).hook("invokeSuspend", HookStage.BEFORE) { param ->
-            if (Config.get("disable_profile_swipe", false) as Boolean) {
+            if (getBooleanSetting("disable_profile_swipe", false)) {
                 getObjectField(param.thisObject(), param.thisObject().javaClass.declaredFields
                     .firstOrNull { it.type.name.contains("ServerDrivenCascadeCachedProfile") }?.name
                 )?.let { cachedProfile ->
@@ -119,6 +119,16 @@ class UnlimitedProfiles : Hook(
                         .onFailure { loge("Profile ID not found in cached profile") }
                 }
             }
+        }
+    }
+
+    private fun getBooleanSetting(key: String, default: Boolean): Boolean {
+        val value = Config.get(key, default)
+        return when (value) {
+            is Boolean -> value
+            is String -> value.equals("true", ignoreCase = true)
+            is Number -> value.toInt() != 0
+            else -> default
         }
     }
 }

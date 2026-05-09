@@ -63,7 +63,7 @@ class Interceptor(
         }
 
         // search for 'getValue().getNameTitleCase()' in userAgent
-        val userAgentString = invokeMethodSafe(userAgent, "a") as? String ?: "Grindr"
+        val userAgentString = invokeMethodSafe(userAgent, "d") as? String ?: "Grindr"
 
         builder.header("Accept", "application/json; charset=UTF-8")
         builder.header("User-Agent", userAgentString)

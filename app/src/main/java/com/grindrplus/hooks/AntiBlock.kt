@@ -25,7 +25,7 @@ class AntiBlock : Hook(
     private var myProfileId: Long = 0
     private val chatDeleteConversationPlugin = "tn.c" // search for '"com.grindrapp.android.chat.ChatDeleteConversationPlugin",' and use the outer class
     private val inboxFragmentV2DeleteConversations = "yx.c" // search for '("chat_read_receipt", conversationId, null);'
-    private val individualUnblockActivityViewModel = "vb0.w" // search for 'SnackbarEvent.i.ERROR, R.string.unblock_individual_sync_blocks_failure, null, new SnackbarEvent'
+    private val individualUnblockActivityViewModel = "bl.k" // search for 'SnackbarEvent.i.ERROR, R.string.unblock_individual_sync_blocks_failure, null, new SnackbarEvent'
 
     override fun init() {
         // do not invoke antiblock notification when the user is unblocking someone else
@@ -43,7 +43,7 @@ class AntiBlock : Hook(
                 GrindrPlus.shouldTriggerAntiblock = true
             }
 
-        if (Config.get("force_old_anti_block_behavior", false) as Boolean) {
+        if (getBooleanSetting("force_old_anti_block_behavior", false)) {
             findClass("com.grindrapp.android.chat.model.ConversationDeleteNotification")
                 .hookConstructor(HookStage.BEFORE) { param ->
                     @Suppress("UNCHECKED_CAST")
@@ -184,7 +184,7 @@ class AntiBlock : Hook(
                 { profileId.toString() } else { "$displayName ($profileId)" }
                 GrindrPlus.bridgeClient.logBlockEvent(profileId.toString(), displayName, true,
                     GrindrPlus.packageName)
-                if (Config.get("anti_block_use_toasts", false) as Boolean) {
+                if (getBooleanSetting("anti_block_use_toasts", false)) {
                     GrindrPlus.showToast(Toast.LENGTH_LONG, "Blocked by $displayName")
                 } else {
                     GrindrPlus.bridgeClient.sendNotificationWithMultipleActions(
@@ -207,7 +207,7 @@ class AntiBlock : Hook(
                 displayName = if (displayName != profileId.toString()) "$displayName ($profileId)" else displayName
                 GrindrPlus.bridgeClient.logBlockEvent(profileId.toString(), displayName, false,
                     GrindrPlus.packageName)
-                if (Config.get("anti_block_use_toasts", false) as Boolean) {
+                if (getBooleanSetting("anti_block_use_toasts", false)) {
                     GrindrPlus.showToast(Toast.LENGTH_LONG, "Unblocked by $displayName")
                 } else {
                     GrindrPlus.bridgeClient.sendNotificationWithMultipleActions(
@@ -228,6 +228,16 @@ class AntiBlock : Hook(
             loge("Error handling profile response: ${e.message ?: "Unknown error"}")
             Logger.writeRaw(e.stackTraceToString())
             return false
+        }
+    }
+
+    private fun getBooleanSetting(key: String, default: Boolean): Boolean {
+        val value = Config.get(key, default)
+        return when (value) {
+            is Boolean -> value
+            is String -> value.equals("true", ignoreCase = true)
+            is Number -> value.toInt() != 0
+            else -> default
         }
     }
 }

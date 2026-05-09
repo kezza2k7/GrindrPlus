@@ -10,8 +10,8 @@ class OnlineIndicator : Hook(
     "Online indicator",
     "Customize online indicator duration"
 ) {
-    val utils = "nf0.u1" // search for ' <= 600000;'
-    val isFeatureFlagEnabled = "q30.f" // search for 'implements IsFeatureFlagEnabled'
+    val utils = "Vm.m0" // search for ' <= 600000;'
+    val isFeatureFlagEnabled = "ih.e" // search for 'implements IsFeatureFlagEnabled'
 
     override fun init() {
         val savedDurationMinutes = Config.get("online_indicator", 3).toString().toInt()

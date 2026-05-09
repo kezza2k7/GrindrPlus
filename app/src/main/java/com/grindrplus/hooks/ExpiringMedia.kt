@@ -26,7 +26,7 @@ class ExpiringMedia : Hook(
         "expiringVideoBody" to "com.grindrapp.android.chat.data.model.messagebody.ExpiringVideoBody",
         "expiringImageBody" to "com.grindrapp.android.chat.data.model.messagebody.ExpiringImageBody",
         "expiringImageBodyUiData" to "com.grindrapp.android.chat.presentation.model.BodyUiData\$ExpiringImageBodyUiData",
-        "expiringStatusResponse" to "com.grindrapp.android.chat.data.datasource.api.model.ExpiringPhotoStatusResponse"
+        "expiringStatusResponse" to "com.grindrapp.android.chat.api.model.ExpiringPhotoStatusResponse"
     )
 
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)

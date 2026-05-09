@@ -104,7 +104,7 @@ class LocationSpoofer : Hook(
             val exampleButton = chatBottomToolbarLinearLayout.children.first()
 
             var locationButtonExists = false
-            if (Config.get("do_gui_safety_checks", true) as Boolean) {
+            if (getBooleanSetting("do_gui_safety_checks", true)) {
                 locationButtonExists = chatBottomToolbarLinearLayout.children.any { view ->
                     if (view is ImageButton) {
                         view.tag == "custom_location_button" ||
@@ -164,6 +164,16 @@ class LocationSpoofer : Hook(
             }
 
             chatBottomToolbarLinearLayout.addView(customLocationButton)
+        }
+    }
+
+    private fun getBooleanSetting(key: String, default: Boolean): Boolean {
+        val value = Config.get(key, default)
+        return when (value) {
+            is Boolean -> value
+            is String -> value.equals("true", ignoreCase = true)
+            is Number -> value.toInt() != 0
+            else -> default
         }
     }
 

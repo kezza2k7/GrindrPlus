@@ -8,6 +8,7 @@ import com.grindrplus.core.Logger
 import com.grindrplus.core.logd
 import com.grindrplus.core.loge
 import com.grindrplus.core.logi
+import com.grindrplus.core.logw
 import com.grindrplus.ui.Utils.copyToClipboard
 import com.grindrplus.utils.Hook
 import com.grindrplus.utils.HookStage
@@ -25,10 +26,10 @@ class EnableUnlimited : Hook(
     private val profileModel = "com.grindrapp.android.persistence.model.Profile"
     private val tabLayoutClass = "com.google.android.material.tabs.TabLayout"
 
-    private val paywallUtils = "x90.e" // search for 'app_restart_required'
-    private val persistentAdBannerContainer = "nb.d" // search for '(ComposeView) ViewBindings.findChildViewById(view,'
+    // private val paywallUtils = "dk.c" // search for 'app_restart_required'
+    private val persistentAdBannerContainer = "Z4.a" // search for '(ComposeView) ViewBindings.findChildViewById(view,'
     private val subscribeToInterstitialsList = listOf(
-        "mo.b1\$a" // search for 'com.grindrapp.android.chat.presentation.ui.ChatActivityV2$subscribeToInterstitialAds$1$1$1'
+        "fa.A\$a" // search for 'com.grindrapp.android.chat.presentation.ui.ChatActivityV2$subscribeToInterstitialAds$1$1$1'
     )
     private val viewsToHide = mapOf(
         "com.grindrapp.android.ui.tagsearch.ProfileTagCascadeFragment\$b" to listOf("upsell_bottom_bar"), // search for 'bind(Landroid/view/View;)Lcom/grindrapp/android/databinding/ProfileTagCascadeFragmentBinding;'
@@ -40,10 +41,25 @@ class EnableUnlimited : Hook(
 
     override fun init() {
         val userSessionClass = findClass(GrindrPlus.userSession)
+
+        val rolesUpdatedMethod = userSessionClass.declaredMethods.firstOrNull {
+            it.name == "W" && it.parameterCount == 1
+        }
+        if (rolesUpdatedMethod == null) {
+            logw("Enable unlimited: method W not found on userSession")
+        } else {
+            logi("Enable unlimited: hooking W(${rolesUpdatedMethod.parameterTypes.joinToString { t -> t.simpleName }})")
+        }
+
         userSessionClass.hook( // rolesUpdated()
 			"W", HookStage.BEFORE // search for 'Intrinsics.checkNotNullParameter(roles, "roles");' in userSession
 		) { param ->
-			val roles = param.arg(0) as List<String>
+            val rolesArg = param.args().getOrNull(0)
+            val roles = (rolesArg as? List<*>)?.filterIsInstance<String>()
+            if (roles == null) {
+                logw("Enable unlimited: skipping W override, unexpected arg type=${rolesArg?.javaClass?.name}")
+                return@hook
+            }
 			val allRoles = listOf(
 				"Plus",
 				"Xtra",
@@ -60,13 +76,31 @@ class EnableUnlimited : Hook(
 			param.setArg(0, allRoles)
 		}
 
+        val getRolesMethod = userSessionClass.declaredMethods.firstOrNull {
+            it.name == "D" && it.parameterCount == 0
+        }
+        val canOverrideRolesAsString =
+            getRolesMethod != null &&
+                    (String::class.java.isAssignableFrom(getRolesMethod.returnType) ||
+                        CharSequence::class.java.isAssignableFrom(getRolesMethod.returnType))
+
+        if (getRolesMethod == null) {
+            logw("Enable unlimited: method D not found on userSession")
+        } else {
+            logi("Enable unlimited: method D return type=${getRolesMethod.returnType.name}")
+        }
+
 		// prevent leak of faked roles into http headers
 		// search for one line method returning an string in userSession
-		userSessionClass.hook( // get roles list as string
-			"D", HookStage.BEFORE
-		) { param ->
-			param.setResult("[]")
-		}
+        if (canOverrideRolesAsString) {
+            userSessionClass.hook( // get roles list as string
+                "D", HookStage.BEFORE
+            ) { param ->
+                param.setResult("[]")
+            }
+        } else {
+            logw("Enable unlimited: skipping D override to avoid return-type mismatch")
+        }
 
         subscribeToInterstitialsList.forEach {
             findClass(it)
@@ -126,6 +160,7 @@ class EnableUnlimited : Hook(
             }
         }
 
+        /*
         findClass(paywallUtils).hook("d", HookStage.BEFORE) { param ->
             val stackTrace = Thread.currentThread().stackTrace.dropWhile {
                 !it.toString().contains("LSPHooker") }.drop(1).joinToString("\n")
@@ -149,7 +184,7 @@ class EnableUnlimited : Hook(
                 .show()
 
             param.setResult(null)
-        }
+        }*/
 
         findClass(profileViewState).hook("isChatPaywalled", HookStage.BEFORE) { param ->
             param.setResult(false)

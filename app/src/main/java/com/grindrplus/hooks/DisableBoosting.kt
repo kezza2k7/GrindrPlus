@@ -11,8 +11,8 @@ class DisableBoosting : Hook(
     "Disable boosting",
     "Get rid of all upsells related to boosting"
 ) {
-    private val drawerProfileUiState = "sc0.j\$a" // search for 'DrawerProfileUiState(showBoostMeButton='
-    private val radarUiModel = "r50.a\$a" // search for 'RadarUiModel(boostButton='
+    private val drawerProfileUiState = "yl.e\$a" // search for 'DrawerProfileUiState(showBoostMeButton='
+    private val radarUiModel = "ii.a\$a" // search for 'RadarUiModel(boostButton='
     private val fabUiModel = "com.grindrapp.android.boost2.presentation.model.FabUiModel"
     private val rightNowMicrosFabUiModel =
         "com.grindrapp.android.rightnow.presentation.model.RightNowMicrosFabUiModel"
